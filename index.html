@@ -1,109 +1,50 @@
-<!-- 
-Библиотека - https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js
-Данные - https://storage.googleapis.com/jmstore/TensorFlowJS/EdX/TrainingData/mnist.js 
--->
 <body>
-  <h1 id="info">Getting data for training. Please wait...</h1>
-  <progress value="0" max="100"></progress>
-  <br />
-  <canvas width="28" height="28"></canvas>
-  <p id="prediction"></p>
-  
+  <img src="image.jpg" width="600" height="600">
+  <canvas width="600" height="600"></canvas>
+
   <style>
     body {
-      margin: 10vh;
+      margin: 0;
     }
     canvas {
-      position: relative;
-      margin: 8vh;
-      scale: 5;
-    }
-    progress {
-      width: 100%;
-      display: none;
-    }
-    p {
-      font-size: 20vh;
-      margin: 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+      background-color: white;
     }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
   <script type="module">
-    // Получение данных
-    import {TRAINING_DATA} from 'https://storage.googleapis.com/jmstore/TensorFlowJS/EdX/TrainingData/mnist.js';
-    
-    // Извлечение тегов из разметки
+    // Извлечение элементов интерфейса
     let context = window.document.querySelector('canvas').getContext('2d');
-    let prediction = window.document.querySelector('#prediction');
-    let info = window.document.querySelector('#info');
-    let progress = window.document.querySelector('progress');
+    let image = window.document.querySelector('img');
 
-    // Рисование изображения на основе числовых данных
-    const drawImage = (digit) => {
-      let imageData = context.getImageData(0, 0, 28, 28);
-      for (let i = 0; i < digit.length; i++){
-        imageData.data[i * 4] = digit[i] * 255; // red
-        imageData.data[i * 4 + 1] = digit[i] * 255; // green
-        imageData.data[i * 4 + 2] = digit[i] * 255; // blue
-        imageData.data[i * 4 + 3] = 255;
-      }
-      context.putImageData(imageData, 0, 0);
-    };
+    // Использование обученной модели
+    const loadAndRunModel = async () => {
+      // Загрузка модели
+      let model = await tf.loadGraphModel(
+        'http://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4',
+        {fromTFHub: true}
+      );
+      
+      // Подготовка данных 
+      let imageTensor = tf.browser.fromPixels(image);
+      let resizedTensor = tf.image.resizeBilinear(imageTensor, [192, 192], true).toInt();
 
-    // Создание стартовых тензоров
-    const INPUT_TENSOR = tf.tensor2d(TRAINING_DATA.inputs);
-    const OUTPUT_TENSOR = tf.oneHot(tf.tensor1d(TRAINING_DATA.outputs, 'int32'), 10);
+      // Использование модели
+      let tensorOutput = model.predict(tf.expandDims(resizedTensor));
 
-    // Создание модели
-    let model = tf.sequential();
-    model.add(tf.layers.dense({ inputShape: [784], units: 32 }));
-    model.add(tf.layers.dense({ units: 16 }));
-    model.add(tf.layers.dense({ units: 10, activation: 'softmax' }));
-
-    // Обучение модели
-    const train = async () => {
-      model.compile({
-        optimizer: tf.train.adam(0.01),
-        loss: 'categoricalCrossentropy',
-        metrics: ['accuracy'],
+      // Отображение результата
+      tensorOutput.array().then(array => {
+        array[0][0].map(elem => {
+          let x = elem[1] * image.width;
+          let y = elem[0] * image.height;
+          context.fillStyle = '#04ff00';
+          context.fillRect(x - 5, y - 5, 10, 10);
+        })
       });
-      info.innerText = 'Training model. Please wait...';
-      progress.style.display = 'block';
-      const EPOCHS = 50;
-      await model.fit(INPUT_TENSOR, OUTPUT_TENSOR, {
-        batchSize: 512,
-        epochs: EPOCHS,
-        shuffle: true,
-        callbacks: {onEpochEnd: (epoch, logs) => {
-          progress.value = epoch / (EPOCHS - 1) * 100;
-          console.log(`Epoch ${epoch} `, logs);
-        }},
-      });
-      info.innerText = 'Model succesfully trained';
-      progress.style.display = 'none';
-      // Удаление стартовых тензоров
-      INPUT_TENSOR.dispose();
-      OUTPUT_TENSOR.dispose();
     }
-    await train();
-
-    // Тестирование модели (evaluate)
-    const tryToPredict = () => {
-      let randomIndex = Math.floor(Math.random() * TRAINING_DATA.inputs.length);
-      let result = tf.tidy(() => {
-        let newInput = tf.tensor1d(TRAINING_DATA.inputs[randomIndex]);
-        let output = model.predict(newInput.expandDims());
-        return output.squeeze().argMax();
-      });
-      result.array().then(number => {
-        prediction.innerText = number;
-        prediction.style.color = (number === TRAINING_DATA.outputs[randomIndex])
-          ? '#00ff00'  // green
-          : '#ff0000'; // red
-        drawImage(TRAINING_DATA.inputs[randomIndex]);
-      });
-    };
-    setInterval(() => tryToPredict(), 1000);
+    await loadAndRunModel();
   </script>
 </body>

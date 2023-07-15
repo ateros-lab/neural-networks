@@ -1,50 +1,61 @@
 <body>
-  <img src="image.jpg" width="600" height="600">
-  <canvas width="600" height="600"></canvas>
-
+  <video width="720" height="1200"></video>
+  <canvas width="720" height="1200"></canvas>
   <style>
-    body {
+    body{
       margin: 0;
     }
-    canvas {
+    video, canvas {
       position: absolute;
       top: 0;
       left: 0;
-      background-color: white;
     }
   </style>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+
   <script type="module">
-    // Извлечение элементов интерфейса
-    let context = window.document.querySelector('canvas').getContext('2d');
-    let image = window.document.querySelector('img');
+    // Извлечение элементов из разметки
+    let video = window.document.querySelector('video');
+    let canvas = window.document.querySelector('canvas');
+    let context = canvas.getContext('2d');
 
-    // Использование обученной модели
-    const loadAndRunModel = async () => {
-      // Загрузка модели
-      let model = await tf.loadGraphModel(
-        'http://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4',
-        {fromTFHub: true}
-      );
-      
-      // Подготовка данных 
-      let imageTensor = tf.browser.fromPixels(image);
-      let resizedTensor = tf.image.resizeBilinear(imageTensor, [192, 192], true).toInt();
-
-      // Использование модели
-      let tensorOutput = model.predict(tf.expandDims(resizedTensor));
-
-      // Отображение результата
-      tensorOutput.array().then(array => {
-        array[0][0].map(elem => {
-          let x = elem[1] * image.width;
-          let y = elem[0] * image.height;
-          context.fillStyle = '#04ff00';
-          context.fillRect(x - 5, y - 5, 10, 10);
-        })
-      });
+    // Загрузка и настройка модели
+    let model = handPoseDetection.SupportedModels.MediaPipeHands;
+    let detectorConfig = {
+      runtime: 'mediapipe', // or 'tfjs'
+      solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands',
+      modelType: 'lite',
     }
-    await loadAndRunModel();
+    let detector = await handPoseDetection.createDetector(model, detectorConfig);
+
+    // Получение изображения с камеры и отображение точек
+    navigator.mediaDevices.getUserMedia({
+      video: {
+        width: 1200,
+        height: 720,
+        facingMode: {
+          exact: 'environment'
+        }
+      },
+      audio: false
+    }).then(stream => {
+      video.srcObject = stream;
+      video.play().then(() => {
+        setInterval(() => {
+          
+          detector.estimateHands(video).then(prediction => {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            prediction[0].keypoints.map(coordinates => {
+              context.fillStyle = 'blue';
+              context.fillRect(coordinates.x - 5, coordinates.y - 5, 10, 10);
+            });
+          });
+
+        }, 10);
+      });
+    }).catch(error => console.log(error));
   </script>
 </body>
